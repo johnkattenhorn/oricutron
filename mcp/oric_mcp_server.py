@@ -11,6 +11,7 @@ Usage:
 
 import base64
 import io
+import os
 import socket
 import struct
 from contextlib import asynccontextmanager
@@ -139,11 +140,32 @@ def oric_type(text: str) -> str:
         oric_type('RUN\\r')
         oric_type('CLOAD""\\r')
     """
+    # Process escape sequences - MCP sends literal \r not CR byte
+    text = text.replace("\\r", "\r").replace("\\n", "\n")
     encoded = base64.b64encode(text.encode()).decode()
     response = conn.send_command(f"QUEUEKEYS {encoded}")
     if response.startswith("ERR"):
         return f"Error: {response}"
     return "OK - keys queued"
+
+
+@mcp.tool()
+def oric_paste(text: str) -> str:
+    """Paste text into the Oric, like clipboard paste. Newlines become RETURN key.
+
+    Use this to enter multi-line BASIC programs in a single call.
+    Tabs become spaces, newlines become RETURN, control chars are stripped.
+
+    Example:
+        oric_paste('10 PRINT "HELLO"\\n20 GOTO 10\\n')
+    """
+    # Process common escape sequences from MCP
+    text = text.replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t")
+    encoded = base64.b64encode(text.encode()).decode()
+    response = conn.send_command(f"PASTE {encoded}")
+    if response.startswith("ERR"):
+        return f"Error: {response}"
+    return "OK - text pasted"
 
 
 @mcp.tool()
@@ -162,13 +184,8 @@ def oric_read_screen() -> str:
     return response
 
 
-@mcp.tool()
-def oric_screenshot() -> list:
-    """Capture the Oric display as a PNG image (240x224, scaled 3x to 720x672).
-
-    Returns the screenshot as an embedded image that Claude can see.
-    Works in both text and graphics modes.
-    """
+def _capture_screenshot():
+    """Internal: capture screenshot and return PIL Image."""
     from PIL import Image
 
     header, rgb_data = conn.send_command_binary("SCREENSHOT")
@@ -178,7 +195,17 @@ def oric_screenshot() -> list:
 
     img = Image.frombytes("RGB", (width, height), rgb_data)
     # Scale 3x for better visibility
-    img = img.resize((width * 3, height * 3), Image.NEAREST)
+    return img.resize((width * 3, height * 3), Image.NEAREST)
+
+
+@mcp.tool()
+def oric_screenshot() -> list:
+    """Capture the Oric display as a PNG image (240x224, scaled 3x to 720x672).
+
+    Returns the screenshot as an embedded image that Claude can see.
+    Works in both text and graphics modes.
+    """
+    img = _capture_screenshot()
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -191,6 +218,21 @@ def oric_screenshot() -> list:
             "mimeType": "image/png",
         }
     ]
+
+
+@mcp.tool()
+def oric_save_screenshot(path: str) -> str:
+    """Save a screenshot of the Oric display to a PNG file on disk.
+
+    Args:
+        path: Absolute path where the PNG file will be saved.
+
+    Use this for capturing sequences of frames for video creation.
+    """
+    img = _capture_screenshot()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path, format="PNG")
+    return f"Saved: {path}"
 
 
 @mcp.tool()

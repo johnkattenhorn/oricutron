@@ -149,6 +149,41 @@ static void cmd_queuekeys(int fd, const char *args)
   send_ok(fd);
 }
 
+static void cmd_paste(int fd, const char *args)
+{
+  char *decoded;
+  int len, b64len, i;
+
+  if(!args || !args[0])
+  {
+    send_err(fd, "PASTE requires base64 argument");
+    return;
+  }
+
+  b64len = strlen(args);
+  decoded = malloc(b64len);  /* decoded always <= encoded length */
+  if(!decoded)
+  {
+    send_err(fd, "Out of memory");
+    return;
+  }
+
+  len = b64_decode(args, decoded, b64len);
+
+  /* Clipboard-style sanitization (same as gui_x11.c:clipboard_paste) */
+  for(i = 0; i < len; i++)
+  {
+    if(decoded[i] == '\t')       decoded[i] = ' ';
+    else if(decoded[i] == '\n')  decoded[i] = '\r';
+    else if(decoded[i] < 0x20 || (unsigned char)decoded[i] >= 0x7f) decoded[i] = ' ';
+  }
+  decoded[len] = '\0';
+
+  queuekeys(decoded);
+  free(decoded);
+  send_ok(fd);
+}
+
 static void cmd_readscreen(int fd, struct machine *oric)
 {
   int line, col, i;
@@ -331,6 +366,8 @@ static void handle_command(struct machine *oric, int fd, char *line)
 
   if(strcasecmp(line, "QUEUEKEYS") == 0)
     cmd_queuekeys(fd, args);
+  else if(strcasecmp(line, "PASTE") == 0)
+    cmd_paste(fd, args);
   else if(strcasecmp(line, "READSCREEN") == 0)
     cmd_readscreen(fd, oric);
   else if(strcasecmp(line, "SCREENSHOT") == 0)
