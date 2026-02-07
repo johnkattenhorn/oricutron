@@ -67,6 +67,7 @@
 #include "tape.h"
 #include "snapshot.h"
 #include "keyboard.h"
+#include "remote_control.h"
 
 #ifdef _MSC_VER
 #if SDL_MAJOR_VERSION == 1
@@ -704,6 +705,7 @@ static void usage(int ret)
                             "                       \"opengl\" for OpenGL\n"
                             "\n"
 #endif
+                            "  --mcp              = Enable MCP remote control socket\n"
                             "  -b / --debug       = Start oricutron in the debugger\n"
                             "  -r / --breakpoint  = Set a breakpoint\n"
                             "\n"
@@ -875,6 +877,11 @@ SDL_bool init(struct machine *oric, int argc, char* argv[])
           if(strcasecmp(tmp, "swsurface") == 0)
           {
             hwsurface = SDL_FALSE;
+            break;
+          }
+          if(strcasecmp(tmp, "mcp") == 0)
+          {
+            oric->mcp_enabled = SDL_TRUE;
             break;
           }
           if(strcasecmp(tmp, "help") == 0)
@@ -1594,6 +1601,10 @@ SDL_bool init(struct machine *oric, int argc, char* argv[])
   if(sto->start_debug)
     setemumode(oric, NULL, EM_DEBUG);
 #endif
+
+  if(oric->mcp_enabled)
+    remote_control_init("/tmp/oricutron-mcp.sock");
+
   free(sto);
   return SDL_TRUE;
 }
@@ -1606,6 +1617,8 @@ void shut(struct machine *oric)
 #endif
   if(oric)
   {
+    if(oric->mcp_enabled)
+      remote_control_shutdown();
     shut_machine(oric);
     shut_joy(oric);
     shut_ula(oric);
@@ -1793,6 +1806,9 @@ static void loop_handler(void* arg)
     if(oric->emu_mode == EM_PLEASEQUIT)
       break;
 
+    if(oric->mcp_enabled)
+      remote_control_poll(oric, &ctx->needrender);
+
     if(oric->emu_mode == EM_RUNNING)
     {
       if(oric->overclockmult == 1)
@@ -1880,6 +1896,14 @@ static void loop_handler(void* arg)
       if(!SDL_PollEvent(event))
         break;
 #else
+#if SDL_MAJOR_VERSION >= 2
+      if(oric->mcp_enabled)
+      {
+        if(!SDL_WaitEventTimeout(event, 50))
+          continue;
+      }
+      else
+#endif
       if(!SDL_WaitEvent(event))
         break;
 #endif

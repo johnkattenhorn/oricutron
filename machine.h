@@ -263,6 +263,8 @@ struct machine
 
   SDL_bool disable_menuscheme;
 
+  SDL_bool mcp_enabled;
+
   int aciaoffset;
   int aciabackend;
   int aciabackendcfg;

@@ -555,6 +555,7 @@ OBJECTS = \
 	joystick.o \
 	snapshot.o \
 	keyboard.o \
+	remote_control.o \
 	$(FILEREQ_OBJ) \
 	$(MSGBOX_OBJ) \
 	$(EXTRAOBJS)
