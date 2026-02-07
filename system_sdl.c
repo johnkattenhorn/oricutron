@@ -456,9 +456,9 @@ int SDL_COMPAT_WM_ToggleFullScreen(SDL_Surface *surface)
     g_fullscreen = (g_fullscreen)? SDL_FALSE : SDL_TRUE;
 
     if(g_fullscreen)
-      SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN);
+      SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
     else
-      SDL_SetWindowSize(g_window, g_width, g_height);
+      SDL_SetWindowSize(g_window, g_width * 2, g_height * 2);
   }
 
   return 0;
@@ -495,7 +495,7 @@ SDL_Surface* SDL_COMPAT_SetVideoMode(int width, int height, int bitsperpixel, Ui
 
 #ifndef __ANDROID__
   g_window = SDL_CreateWindow("oricutron", g_lastx, g_lasty,
-                              g_width, g_height, flags);
+                              g_width * 2, g_height * 2, flags | SDL_WINDOW_RESIZABLE);
 #else
   g_window = SDL_CreateWindow("oricutron", SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
                               0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -515,10 +515,8 @@ SDL_Surface* SDL_COMPAT_SetVideoMode(int width, int height, int bitsperpixel, Ui
     g_screen = SDL_CreateRGBSurface(0, g_width, g_height, g_bpp,
                                     RMASK, GMASK, BMASK, AMASK);
     g_renderer = SDL_CreateRenderer(g_window, -1, 0);
-#ifdef __ANDROID__
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");//"linear");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
     SDL_RenderSetLogicalSize(g_renderer, g_width, g_height);
-#endif
     g_texture = SDL_CreateTexture(g_renderer,
                                   SDL_PIXELFORMAT_ABGR8888,
                                   SDL_TEXTUREACCESS_STREAMING,
