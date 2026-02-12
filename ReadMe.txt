@@ -1,9 +1,14 @@
-Oricutron 1.2
--------------
+Oricutron 1.2 (MCP fork)
+------------------------
 
 (c)2009-2014 Peter Gordon (pete@gordon.plus)
+Fork maintained by John, with AI-assisted development (Claude)
 
 This is a work in progress.
+
+This fork adds MCP (Model Context Protocol) support for controlling the
+emulator from Claude Code, plus SDL2 display scaling fixes. See the
+"Changes in this fork" section below for details.
 
 
 Current status
@@ -15,6 +20,152 @@ Current status
   Video: 100% done
   Tape:  99% done (.TAP, .ORT and .WAV supported)
   Disk:  90% done (single-density mode not supported)
+
+
+Changes in this fork
+====================
+
+This fork introduces two main additions on top of the upstream Oricutron:
+
+  1. MCP remote control interface (Linux/macOS only)
+  2. SDL2 display scaling and fullscreen fixes
+
+
+SDL2 display scaling fixes
+---------------------------
+
+The window is now created at 2x the internal resolution (480x448 instead
+of 240x224), making it a usable size on modern displays. The window is
+resizable and uses SDL logical rendering to scale smoothly to any size.
+
+Fullscreen mode now uses SDL_WINDOW_FULLSCREEN_DESKTOP (borderless
+windowed fullscreen) instead of exclusive fullscreen, which avoids
+monitor mode switching and works better on multi-monitor setups.
+
+When exiting fullscreen, the window correctly restores to the 2x size.
+
+
+MCP remote control interface
+=============================
+
+MCP (Model Context Protocol) allows Claude Code (or any MCP client) to
+control the emulator programmatically -- typing BASIC programs, reading
+the screen, taking screenshots, loading tapes, and inspecting memory.
+
+This is useful for AI-assisted retro programming, automated testing, and
+demo creation.
+
+Platform support: Linux and macOS only (uses Unix domain sockets).
+Not available on Windows or WebAssembly builds.
+
+
+Quick start
+-----------
+
+1. Build Oricutron as normal (make sure SDL2 dev libs are installed).
+
+2. Launch with the --mcp flag:
+
+     ./oricutron --mcp
+
+   This starts the emulator and listens on /tmp/oricutron-mcp.sock
+
+3. Install the Python MCP server dependencies:
+
+     pip install "mcp[cli]>=1.0.0" "Pillow>=10.0.0"
+
+4. Register the MCP server with Claude Code:
+
+     claude mcp add --transport stdio oricutron -- python /path/to/mcp/oric_mcp_server.py
+
+5. Start Claude Code. The Oricutron tools will be available automatically.
+
+
+Command line option
+-------------------
+
+  --mcp              = Enable MCP remote control socket
+                       (listens on /tmp/oricutron-mcp.sock)
+
+
+MCP tools available in Claude Code
+-----------------------------------
+
+Once registered, these tools are available to Claude:
+
+  oric_type(text)
+      Type text on the Oric keyboard. Use \r for RETURN.
+      Example: oric_type('10 PRINT "HELLO"\r')
+
+  oric_paste(text)
+      Paste multi-line text, like clipboard paste. Newlines become
+      RETURN, tabs become spaces, control chars are stripped.
+      Use this for entering entire BASIC programs in one call.
+      Example: oric_paste('10 PRINT "HELLO"\n20 GOTO 10\n')
+
+  oric_read_screen()
+      Read the 40x28 text-mode screen. Returns 28 lines of text.
+      Useful for reading listings, output, and error messages.
+
+  oric_screenshot()
+      Capture the display as a PNG image (240x224, scaled 3x).
+      Returns an embedded image that Claude can see directly.
+      Works in both text and graphics modes.
+
+  oric_save_screenshot(path)
+      Save a screenshot PNG to disk. Useful for capturing frame
+      sequences for video/GIF creation.
+
+  oric_load_tape(path, auto_run=False)
+      Load a .tap tape image. With auto_run=True, automatically
+      queues CLOAD"" to start loading.
+
+  oric_reset()
+      Soft reset the emulator.
+
+  oric_read_memory(address, length=256)
+      Hex dump of RAM/ROM with ASCII representation.
+      Common addresses:
+        0x0000-0x00FF  Zero page
+        0x0400-0x07FF  BASIC program area
+        0xBB80-0xBFDF  Text screen memory (40x28)
+        0xA000-0xBF3F  HIRES screen memory
+
+  oric_get_state()
+      Returns emulator state: mode (running/paused/debug/menu),
+      machine type, video mode, tape status.
+
+
+Low-level socket protocol
+--------------------------
+
+The emulator listens on a Unix domain socket at /tmp/oricutron-mcp.sock.
+Commands are newline-terminated text. Responses end with "END\n".
+
+  PING                    -> OK\nEND\n
+  QUEUEKEYS <base64>      -> OK\nEND\n
+  PASTE <base64>           -> OK\nEND\n
+  READSCREEN               -> OK\n<28 lines of 40 chars>\nEND\n
+  SCREENSHOT               -> OKBIN <w> <h> <nbytes>\n<raw RGB>\nEND\n
+  LOADTAPE <path>          -> OK\nEND\n
+  RESET                    -> OK\nEND\n
+  READMEM <addr> <len>     -> OK\n<hex string>\nEND\n
+  GETSTATE                 -> OK\n<key=value lines>\nEND\n
+
+Errors return: ERR <message>\n
+
+You can test the socket directly:
+
+  echo "PING" | socat - UNIX-CONNECT:/tmp/oricutron-mcp.sock
+
+
+Source files
+------------
+
+  remote_control.c / .h    - C socket server and command handlers
+  mcp/oric_mcp_server.py   - Python MCP server (bridges socket to MCP)
+  mcp/requirements.txt     - Python dependencies
+  mcp/demo/                - Demo scripts and assets for video capture
 
 
 
@@ -161,6 +312,10 @@ Here are all the options:
   -b / --debug       = Start oricutron in the debugger
   -r / --breakpoint  = Set a breakpoint (See NOTE2)
   -h / --help        = Print command line help and quit
+
+  --mcp              = Enable MCP remote control socket (Linux/macOS only)
+                       Listens on /tmp/oricutron-mcp.sock for commands.
+                       See "MCP remote control interface" section above.
 
   --turbotape on|off = Enable or disable turbotape
   --lightpen on|off  = Enable or disable lightpen
